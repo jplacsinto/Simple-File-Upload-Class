@@ -1,0 +1,301 @@
+<?php
+
+/*
+ * author: Kusipet
+ * Simple upload class
+ * this upload class is made to manage uploaded files, 
+ * validate filetypes, rename, resize and create thumbnail for images
+ */
+
+
+/* todo
+ * create function for:
+ * uploaded data
+ */
+
+class kusipet_upload {
+
+    //file infomation
+    public $name; //file name
+    public $type; //mime type
+    public $tmp_name; //temporary name
+    public $size; // file size
+    public $ext; //extension name
+    public $name_only; //file name with out extension
+    //validation
+    public $allowed_ext = array("gif", "jpeg", "jpg", "png"); //what type of file to accept
+    public $max_size = 700000; //70kb
+    public $max_height; //maximum height
+    public $max_width; //maximum width
+    //----
+    //otehrs
+    public $path; //upload path
+    public $thumb_path; //thumbnail path
+    public $thumb_width = 50; //desired thumbnail width
+    public $thumb_height = 50; //desired thumbnail height
+    public $ratio = true; //maintain ratio
+    public $thumb_suf = '_thumb'; // suffix for thumbnails
+    public $new_name; //desired name, note: if the file exist
+    public $name_add_pre; //add prefix
+    public $name_add_suf; // append suffix to the name
+    public $auto_rename = false; //if false file will be overwriiten
+    public $md5 = false; //to md5 the file name
+    public $error_msg; // the error message
+    //allowed mime types for image resize
+    public $allowed_mime_resize = array(
+        'image/jpeg',
+        'image/gif',
+        'image/png',
+    );
+    //ime type allowed
+    //array of mime type
+    public $mime_types; //if not empty, valid mime types only
+    //error messages
+    public $error = array(
+        'filename_exist' => 'The file exist.',
+        'extension' => 'Invalid type of file.',
+        'file_size' => 'File is too big.',
+        'no_file' => 'Please select file to upload.',
+        'directory' => 'Please make sure the folder exist.',
+        'max_height' => 'Image height exceeds the maximum limit',
+        'max_width' => 'Image width exceeds the maximum limit',
+        'chmod' => 'Unable to upload file. please check your directory if it exist and it\'s permission.'
+    );
+
+    //init
+    function init($file, $config = NULL) {
+        $this->name = $_FILES[$file]["name"];
+        $this->type = $_FILES[$file]["type"];
+        $this->tmp_name = $_FILES[$file]["tmp_name"];
+        $this->size = $_FILES[$file]["size"];
+        $temp = explode(".", $_FILES[$file]["name"]);
+        $this->ext = end($temp);
+
+        $pos = strlen($this->name) - (strlen($this->ext) + 1);
+        $this->name_only = substr($this->name, 0, $pos);
+
+        if ($config != '') {
+            foreach ($config as $var => $val) {
+                $this->$var = $val;
+            }
+        }
+    }
+
+    //check if valid extension
+    function valid_ext() {
+        $valid = (!empty($this->allowed_ext) && in_array($this->ext, $this->allowed_ext)) ? 1 : 0;
+        if (!empty($this->mime_types))
+            $valid = ($valid && in_array($this->type, $this->mime_types)) ? 1 : 0;
+        return $valid;
+    }
+
+    //check tha file size
+    function valid_size() {
+        if ($this->size > $this->max_size)
+            return false;
+        else
+            return true;
+    }
+
+    //rename file
+    function auto_rename($path, $file_name, $ext, $thumb = false) {
+        $end = (!$thumb) ? '.' . $ext : $this->thumb_suf . '.' . $ext;
+        $file = $path . $file_name . $end;
+        $new_name = $file_name . $end;
+        $x = 0;
+        while (file_exists($file)) {
+            $x++;
+            $new_name = $file_name . '_' . $x . $end;
+            $file = $path . $new_name;
+        }
+        return $new_name;
+    }
+
+    //check if image is valid for resize
+    function valid_image() {
+        if (in_array($this->type, $this->allowed_mime_resize))
+            return true;
+        else
+            return false;
+    }
+
+    //get image dimension
+    function get_image_dimension($file) {
+        $dimension = array();
+        list($width, $height) = getimagesize($file);
+        $dimension['width'] = $width;
+        $dimension['height'] = $height;
+        return $dimension;
+    }
+
+    function make_thumb() {
+        $file = $this->path . $this->name;
+
+        if ($this->valid_image($file)) {
+
+            $w = $this->thumb_width;
+            $h = $this->thumb_height;
+            $ratio = $this->ratio;
+
+            $dimension = $this->get_image_dimension($file);
+            $width = $dimension['width'];
+            $height = $dimension['height'];
+
+            $r = $width / $height;
+            if (!$ratio) {
+                if ($width > $height) {
+                    $width = ceil($width - ($width * ($r - $w / $h)));
+                } else {
+                    $height = ceil($height - ($height * ($r - $w / $h)));
+                }
+                $newwidth = $w;
+                $newheight = $h;
+            } else {
+                if ($w / $h > $r) {
+                    $newwidth = $h * $r;
+                    $newheight = $h;
+                } else {
+                    $newheight = $w / $r;
+                    $newwidth = $w;
+                }
+            }
+
+            switch ($this->type) {
+                case 'image/jpeg':
+                    $src = imagecreatefromjpeg($file);
+                    break;
+                case 'image/gif':
+                    $src = imagecreatefromgif($file);
+                    break;
+                case 'image/png':
+                    $src = imagecreatefrompng($file);
+                    break;
+            }
+
+            $dst = imagecreatetruecolor($newwidth, $newheight);
+            //imagecopyresampled($dst, $src, 0, 0, 0, 0, $newwidth, $newheight, $width, $height);
+            imagecopyresized($dst, $src, 0, 0, 0, 0, $newwidth, $newheight, $width, $height);
+            $name = $this->auto_rename($this->thumb_path, $this->name_only, $this->ext, true);
+
+            switch ($this->type) {
+                case 'image/jpeg':
+                    imagejpeg($dst, "{$this->thumb_path}{$name}");
+                    break;
+                case 'image/gif':
+                    imagegif($dst, "{$this->thumb_path}{$name}");
+                    break;
+                case 'image/png':
+                    imagepng($dst, "{$this->thumb_path}{$name}");
+                    break;
+            }
+        }
+    }
+
+    function do_upload($file, $config = NULL) {
+        //checks if file is set
+        if (isset($_FILES[$file]) && !empty($_FILES[$file]['name'])) {
+            //initialize
+            $this->init($file, $config);
+
+            //check directory
+            if (!is_dir($this->path)) {
+                $this->error_msg = $this->error['directory'];
+                return false;
+            }
+
+
+            //validate image dimensions
+            if (($this->max_height != '' || $this->max_width != '') && $this->valid_image()) {
+                $dimension = $this->get_image_dimension($this->tmp_name);
+                $height = $dimension['height'];
+                $width = $dimension['width'];
+                if ($this->max_height != '' && $this->max_height > $height) {
+                    $this->error_msg = $this->error['max_height'];
+                    return false;
+                } else if ($this->max_width != '' && $this->max_width > $width) {
+                    $this->error_msg = $this->error['max_width'];
+                    return false;
+                }
+            }
+
+
+
+            //desired name
+            if ($this->new_name != '') {
+                //checks if the name exist
+                if (file_exists($this->path . $this->new_name . $this->ext)) {
+                    $this->error_msg = $this->error['filename_exist'];
+                    return false;
+                } else {
+                    $this->name_only = $this->new_name;
+                    $this->name = $this->name_only . $this->ext;
+                }
+            }
+
+            //check file size
+            if (!$this->valid_size()) {
+                //file exeeded
+                $this->error_msg = $this->error['file_size'];
+                return false;
+            }
+
+            //check the extension of the file
+            if (!$this->valid_ext()) {
+                //invalid file
+                //$this->error_msg = $this->type;
+                $this->error_msg = $this->error['extension'];
+                return false;
+            }
+
+
+            if ($this->md5) {
+                $this->name = md5(date('Y-m-d H:i:s:u')) . '.' . $this->ext;
+                $this->name_only = md5(date('Y-m-d H:i:s:u')) . '.' . $this->ext;
+            }
+
+            if ($this->name_add_pre != '') {
+                $this->name = $this->name_add_pre . $this->name;
+                $this->name_only = $this->name_add_pre . $this->name_only;
+            }
+
+            if ($this->name_add_suf != '') {
+                $this->name = $this->name_only . $this->name_add_suf . '.' . $this->ext;
+                $this->name_only = $this->name_only . $this->name_add_suf;
+            }
+
+            if ($this->auto_rename && !$this->md5) {
+                $this->name = $this->auto_rename($this->path, $this->name_only, $this->ext);
+            }
+
+            if (@move_uploaded_file($this->tmp_name, $this->path . $this->name)) {
+                //Done
+                //for creating image_thumb
+                if ($this->thumb_path != '' && is_dir($this->thumb_path)) {
+                    $this->make_thumb();
+                }                
+                return true;
+            } else {
+                $this->error_msg = $this->error['chmod'];
+                return false; //File not moved
+            }
+        } else {
+            //no file selected
+            $this->error_msg = $this->error['no_file'];
+            return false;
+        }
+    }
+
+    //returns the error
+    public function get_error() {
+        return $this->error_msg;
+    }
+
+    
+    /*return data from uploaded file
+    public function get_data() {}
+     * 
+     */
+
+}
+
+?>
