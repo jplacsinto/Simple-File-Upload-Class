@@ -83,9 +83,13 @@ class kusipet_upload {
 
     //check if valid extension
     function valid_ext() {
+        $this->allowed_ext = array_map('strtolower', $this->allowed_ext);
+        $this->ext = strtolower($this->ext);
         $valid = (!empty($this->allowed_ext) && in_array($this->ext, $this->allowed_ext)) ? 1 : 0;
-        if (!empty($this->mime_types))
+        if (!empty($this->mime_types)){
+            $this->mime_types = array_map('strtolower', $this->mime_types);
             $valid = ($valid && in_array($this->type, $this->mime_types)) ? 1 : 0;
+        }
         return $valid;
     }
 
