@@ -232,7 +232,7 @@ class kusipet_upload {
                     return false;
                 } else {
                     $this->name_only = $this->new_name;
-                    $this->name = $this->name_only . $this->ext;
+                    $this->name = $this->name_only .'.'. $this->ext;
                 }
             }
 
